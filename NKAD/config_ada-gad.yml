@@ -1,0 +1,200 @@
+inj_cora:
+  lr: 0.0001
+  num_heads: 1
+  weight_decay: 2e-5
+  max_epoch: 30
+  activation: relu
+  optimizer: adam
+  alpha_l: 3
+  dropout: 0.3
+  attr_encoder: "gcn"
+  attr_decoder: "gat"
+  struct_decoder: "gat"
+  node_encoder_num_layers: 1
+  attr_decoder_num_layers: 1
+  struct_decoder_num_layers: 1
+  num_hidden: 64
+  loss_weight_f: 0
+  alpha: None
+  model_name: "NKAD"
+  loss_f: "add_log_t_entropy"
+  T_f: 2
+  highpass_layer_num: 1
+  # neighbor_rec_loss_coe: 1
+  # high_coe: 0.1
+  # center_rec_coef: 0.01
+  high_augment: True
+  neighbor_rec: True
+  center_rec: True
+inj_amazon:
+  lr: 0.0001
+  num_heads: 1
+  weight_decay: 2e-5
+  max_epoch: 30
+  num_layers: 2
+  activation: relu
+  optimizer: adam
+  alpha_l: 3
+  dropout: 0.3
+  attr_encoder: "gcn"
+  attr_decoder: "gat"
+  struct_decoder: "gat"
+  node_encoder_num_layers: 1
+  attr_decoder_num_layers: 1
+  struct_decoder_num_layers: 1
+  num_hidden: 16
+  loss_weight_f: -0.01
+  alpha: 0.99
+  model_name: "NKAD"
+  loss_f: "add_log_t_entropy"
+  T_f: 2
+  highpass_layer_num: 1
+  high_coe: 0.9
+  neighbor_rec_loss_coe: 1
+  center_rec_coef: 0.9
+  high_augment: True
+  neighbor_rec: True
+  center_rec: True
+weibo:
+  lr: 0.0001
+  num_heads: 1
+  weight_decay: 2e-5
+  max_epoch: 30
+  activation: relu
+  optimizer: adam
+  alpha_l: 3
+  dropout: 0.3
+  attr_encoder: "gcn"
+  attr_decoder: "gat"
+  struct_decoder: "gat"
+  node_encoder_num_layers: 2
+  attr_decoder_num_layers: 1
+  struct_decoder_num_layers: 1
+  num_hidden: 32
+  loss_weight_f: -0.001
+  alpha: 0.9
+  model_name: "NKAD"
+  loss_f: "add_log_t_entropy"
+  T_f: 2
+  loss_weight_f: -0.1
+  highpass_layer_num: 1
+  # neighbor_rec_loss_coe: 3
+  # high_coe: 0.1
+  # center_rec_coef: 0.5
+  high_augment: True
+  neighbor_rec: True
+  center_rec: True
+reddit:
+  lr: 0.001
+  weight_decay: 2e-4
+  max_epoch: 30
+  activation: relu
+  optimizer: adam
+  alpha_l: 3
+  dropout: 0.3
+  attr_encoder: "gcn"
+  attr_decoder: "gcn"
+  struct_decoder: "gcn"
+  node_encoder_num_layers: 2
+  attr_decoder_num_layers: 1
+  struct_decoder_num_layers: 1
+  num_hidden: 16
+  model_name: "NKAD"
+  loss_f: "add_log_t_entropy"
+  T_f: 2
+  loss_weight_f: -1
+  alpha: 0.9
+  highpass_layer_num: 1
+  # neighbor_rec_loss_coe: 0.5
+  # high_coe: 0.5
+  # center_rec_coef: 0.1
+  high_augment: True
+  neighbor_rec: True
+  center_rec: True
+disney:
+  lr: 0.01
+  num_heads: 1
+  weight_decay: 2e-4
+  max_epoch: 30
+  num_layers: 2
+  activation: relu
+  optimizer: adam
+  alpha_l: 3
+  dropout: 0.3
+  aggr_f: "min"
+  attr_encoder: "gcn"
+  attr_decoder: "gcn"
+  struct_decoder: "gcn"
+  node_encoder_num_layers: 1
+  attr_decoder_num_layers: 1
+  struct_decoder_num_layers: 1
+  num_hidden: 32
+  loss_weight_f: -0.01
+  model_name: "NKAD"
+  loss_f: "add_log_t_entropy"
+  T_f: 2
+  loss_weight_f: -0.01
+  alpha: None
+  highpass_layer_num: 2
+  # neighbor_rec_loss_coe: 1
+  # high_coe: 0.5
+  # center_rec_coef: 0.4
+  high_augment: True
+  neighbor_rec: True
+  center_rec: True
+books:
+  lr: 0.0001
+  num_heads: 1
+  weight_decay: 2e-5
+  max_epoch: 30
+  num_layers: 2
+  activation: relu
+  optimizer: adam
+  alpha_l: 3
+  dropout: 0.
+  aggr_f: "min"
+  attr_encoder: "gcn"
+  attr_decoder: "gcn"
+  struct_decoder: "gcn"
+  node_encoder_num_layers: 2
+  attr_decoder_num_layers: 1
+  struct_decoder_num_layers: 1
+  num_hidden: 16
+  loss_weight_f: -0.01
+  alpha: None
+  model_name: "NKAD"
+  loss_f: "add_log_t_entropy"
+  T_f: 2
+  loss_weight_f: -1
+  highpass_layer_num: 1
+  # neighbor_rec_loss_coe: 1
+  # high_coe: 0.1
+  # center_rec_coef: 0.3
+  high_augment: True
+  neighbor_rec: True
+  center_rec: True
+enron:
+  lr: 0.0001
+  weight_decay: 2e-5
+  max_epoch: 30
+  activation: relu
+  optimizer: adam
+  dropout: 0.3
+  attr_encoder: "gcn"
+  attr_decoder: "gcn"
+  struct_decoder: "gcn"
+  node_encoder_num_layers: 1
+  attr_decoder_num_layers: 1
+  struct_decoder_num_layers: 1
+  num_hidden: 16
+  alpha: 0.9
+  model_name: "NKAD"
+  loss_f: "add_log_t_entropy"
+  T_f: 2
+  highpass_layer_num: 1
+  # neighbor_rec_loss_coe: 1
+  # high_coe: 0.9
+  # center_rec_coef: 0
+  high_augment: True
+  neighbor_rec: True
+  center_rec: True
