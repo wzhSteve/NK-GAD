@@ -132,10 +132,7 @@ class NKAD(Detector):
                  highpass_layer_num=2,
                  neighbor_rec_loss_coe=1,
                  high_coe=0.5,
-                 center_rec_coef=0.2,
-                 high_augment=True,
-                 neighbor_rec=True,
-                 center_rec=False
+                 center_rec_coef=0.2
                  ):
         super(NKAD, self).__init__(contamination=contamination)
 
@@ -180,9 +177,6 @@ class NKAD(Detector):
         self.neighbor_rec_loss_coe = neighbor_rec_loss_coe
         self.high_coe = high_coe
         self.center_rec_coef = center_rec_coef
-        self.high_augment = high_augment
-        self.neighbor_rec = neighbor_rec
-        self.center_rec = center_rec
     
     def fit(self, G, y_true=None):
         
@@ -215,10 +209,7 @@ class NKAD(Detector):
                                    struct_decoder_num_layers=self.struct_decoder_num_layers,
                                    highpass_layer_num=self.highpass_layer_num,
                                    high_coe=self.high_coe,
-                                   center_rec_coef=self.center_rec_coef,
-                                   high_augment=self.high_augment,
-                                   neighbor_rec=self.neighbor_rec,
-                                   center_rec=self.center_rec).to(self.device)
+                                   center_rec_coef=self.center_rec_coef).to(self.device)
 
         optimizer = torch.optim.Adam(self.model.parameters(),
                                      lr=self.lr,
@@ -399,10 +390,7 @@ class NKAD_Base(nn.Module):
                  struct_decoder_num_layers=1,
                  highpass_layer_num=2,
                  high_coe=0.5,
-                 center_rec_coef=0.2,
-                 high_augment=True,
-                 neighbor_rec=True,
-                 center_rec=False,
+                 center_rec_coef=0.2
                  ):
         super(NKAD_Base, self).__init__()
 
@@ -468,28 +456,22 @@ class NKAD_Base(nn.Module):
         self.highpass_layer_num = highpass_layer_num
         self.high_coe = high_coe
         self.center_rec_coef = center_rec_coef
-        self.high_augment = high_augment
-        self.neighbor_rec = neighbor_rec
-        self.center_rec = center_rec
 
         self.k_neighbors = 10
 
-        if self.high_augment:
-            self.high_pass_encoder = HighPassGCN(in_channels=in_dim,
-                                       hidden_channels=hid_dim,
-                                       num_layers=highpass_layer_num,
-                                       out_channels=hid_dim,
-                                       dropout=dropout,
-                                       add_self_loops=False,
-                                       act=act)
-        if self.neighbor_rec:
-            self.mlp_mean = nn.Linear(hid_dim, hid_dim)
-            self.mlp_sigma = nn.Linear(hid_dim, hid_dim)
-            self.mlp_gen = MLP_generator(hid_dim, hid_dim)
-            self.feature_decoder = FNN_GAD_NR(hid_dim, hid_dim, hid_dim, 2)
-
-        if self.center_rec:
-            self.reconstructor_from_neighbor = GATAggregator(hid_dim, hid_dim, hid_dim)
+        self.high_pass_encoder = HighPassGCN(in_channels=in_dim,
+                                   hidden_channels=hid_dim,
+                                   num_layers=highpass_layer_num,
+                                   out_channels=hid_dim,
+                                   dropout=dropout,
+                                   add_self_loops=False,
+                                   act=act)
+                     
+        self.mlp_mean = nn.Linear(hid_dim, hid_dim)
+        self.mlp_sigma = nn.Linear(hid_dim, hid_dim)
+        self.mlp_gen = MLP_generator(hid_dim, hid_dim)
+        self.feature_decoder = FNN_GAD_NR(hid_dim, hid_dim, hid_dim, 2)
+        self.reconstructor_from_neighbor = GATAggregator(hid_dim, hid_dim, hid_dim)
             
 
 
@@ -506,19 +488,17 @@ class NKAD_Base(nn.Module):
         else:
             embed = h_low
 
-        if self.neighbor_rec:
-            h0_rec = self.feature_decoder(embed)
-            h0_diff = (h0_rec - h0)  # [N, d]
-            h0_rec_loss = torch.sum(h0_diff**2, dim=-1) # Scalar
-            generated_mean, generated_cov, neighbor_rec_loss = self.full_batch_neigh_recon(h_low, h_high, h0, edge_index)
-            neighbor_rec_loss = neighbor_rec_loss + h0_rec_loss
+        h0_rec = self.feature_decoder(embed)
+        h0_diff = (h0_rec - h0)  # [N, d]
+        h0_rec_loss = torch.sum(h0_diff**2, dim=-1) # Scalar
+        generated_mean, generated_cov, neighbor_rec_loss = self.full_batch_neigh_recon(h_low, h_high, h0, edge_index)
+        neighbor_rec_loss = neighbor_rec_loss + h0_rec_loss
 
-        if self.center_rec:
-            mean_agg, cov_agg = self.reconstructor_from_neighbor(generated_mean, generated_cov, edge_index)
-            # mean_agg = (mean_agg - mean_agg.mean()) / (mean_agg.std() + 1e-6)
-            cov_agg = cov_agg / (torch.norm(cov_agg, dim=(-1, -2), keepdim=True) + 1e-6)
-            h_reconstructed = torch.einsum('nd,nbd->nb', mean_agg, cov_agg)
-            embed = (1 - self.center_rec_coef) * embed + self.center_rec_coef * h_reconstructed
+        mean_agg, cov_agg = self.reconstructor_from_neighbor(generated_mean, generated_cov, edge_index)
+        # mean_agg = (mean_agg - mean_agg.mean()) / (mean_agg.std() + 1e-6)
+        cov_agg = cov_agg / (torch.norm(cov_agg, dim=(-1, -2), keepdim=True) + 1e-6)
+        h_reconstructed = torch.einsum('nd,nbd->nb', mean_agg, cov_agg)
+        embed = (1 - self.center_rec_coef) * embed + self.center_rec_coef * h_reconstructed
             
         # # attribute decode
         if self.attr_decoder_name=='mlp' or self.attr_decoder_name=='linear':
@@ -532,10 +512,7 @@ class NKAD_Base(nn.Module):
             h_ = self.struct_decoder(embed, edge_index)
         s_ = h_ @ h_.T
 
-        if self.neighbor_rec:
-            return x_, s_, neighbor_rec_loss
-        else:
-            return x_, s_, None
+        return x_, s_, neighbor_rec_loss
     
     def compute_neighbors_stats(self, x, edge_index):
         src, dst = edge_index
@@ -554,51 +531,8 @@ class NKAD_Base(nn.Module):
         std_neighbors = (variance_neighbors + 1e-6).sqrt()
 
         return mean_neighbors, std_neighbors
-
-    # def gather_neighbors_features(self, h0, edge_index):
-    #     """
-    #     根据edge_index提取每个节点的邻居特征，并随机选择K个邻居。
-    #     Args:
-    #         h0: 节点特征矩阵 [N, d]
-    #         edge_index: 图的边索引矩阵 [2, num_edges]
-    #     Returns:
-    #         neighbors_features: 邻居特征张量 [N, K, d]
-    #     """
-    #     N, d = h0.shape
-    #     src, dst = edge_index  # 源节点和目标节点索引
-
-    #     # 按目标节点 dst 聚合源节点 src 的特征
-    #     neighbors_list = [[] for _ in range(N)]
-    #     for s, o in zip(src.tolist(), dst.tolist()):
-    #         neighbors_list[o].append(h0[s])
-
-    #     # 初始化邻居特征张量
-    #     neighbors_features = torch.zeros((N, self.k_neighbors, d), device=h0.device)
-
-    #     for i, neighbors in enumerate(neighbors_list):
-    #         num_neighbors = len(neighbors)
-
-    #         if num_neighbors == 0:
-    #             # 如果没有邻居，用零向量填充
-    #             selected_neighbors = [torch.zeros(d, device=h0.device) for _ in range(self.k_neighbors)]
-    #         else:
-    #             # 随机选取 K 个邻居（允许重复采样）
-    #             selected_neighbors = random.choices(neighbors, k=self.k_neighbors)
-
-    #         # 将选中的邻居特征存入张量
-    #         neighbors_features[i] = torch.stack(selected_neighbors)
-
-    #     return neighbors_features
     
     def gather_neighbors_features(self, h0, edge_index):
-        """
-        根据 edge_index 提取每个节点的邻居特征，并随机选择 K 个邻居。
-        Args:
-            h0: 节点特征矩阵 [N, d]
-            edge_index: 图的边索引矩阵 [2, num_edges]
-        Returns:
-            neighbors_features: 邻居特征张量 [N, K, d]
-        """
         N, d = h0.shape
         src, dst = edge_index  # 源节点和目标节点索引
 
@@ -706,37 +640,5 @@ class NKAD_Base(nn.Module):
             # Total simplified loss
             # mean_term = F.normalize(mean_term, p=1, dim=0)
             neighbor_loss = mean_term.mean() + std_term.mean() + cov_term.mean()  # Scalar
-
-
-        # # 假设 target_mean 和 generated_mean 是通过 full_batch_neigh_recon 函数得到的
-        # # target_mean, target_std = [N, d]
-        # # generated_mean, generated_std = [N, d]
-
-        # # 找到 target_std 最大的节点和维度
-        # max_std_idx = torch.argmax(target_std)  # 返回最大值的线性索引
-        # i, j = divmod(max_std_idx.item(), target_std.shape[1])  # 转换为节点索引和维度索引
-
-        # # 获取对应的均值和标准差
-        # target_mu = target_mean[i, j].item()
-        # target_sigma = target_std[i, j].item()
-        # generated_mu = generated_mean[i, j].item()
-        # generated_sigma = generated_std[i, j].item()
-
-        # # 生成正态分布数据
-        # x = np.linspace(-0.2, 0.2, 500)  # 定义 x 范围
-        # target_pdf = (1 / (np.sqrt(2 * np.pi) * target_sigma)) * np.exp(-0.5 * ((x - target_mu) / target_sigma)**2)
-        # generated_pdf = (1 / (np.sqrt(2 * np.pi) * generated_sigma)) * np.exp(-0.5 * ((x - generated_mu) / generated_sigma)**2)
-
-        # # 绘制分布
-        # plt.clf()
-        # plt.figure(figsize=(8, 6))
-        # plt.plot(x, target_pdf, label=f"Target Distribution (mean={target_mu:.4f}, std={target_sigma:.4f})", color='blue')
-        # plt.plot(x, generated_pdf, label=f"Generated Distribution (mean={generated_mu:.4f}, std={generated_sigma:.4f})", color='orange')
-        # plt.title(f"Node {i}, Dimension {j}")
-        # plt.xlabel("Value")
-        # plt.ylabel("Probability Density")
-        # plt.legend()
-        # # plt.grid(True)
-        # plt.savefig(current_dir + "/neighbor_distribution.pdf")
 
         return target_mean, generated_cov, neighbor_loss
