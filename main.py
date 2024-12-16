@@ -100,10 +100,7 @@ def main(args):
                                 highpass_layer_num=args.highpass_layer_num,
                                 neighbor_rec_loss_coe=args.neighbor_rec_loss_coe,
                                 high_coe=args.high_coe,
-                                center_rec_coef=args.center_rec_coef,
-                                high_augment=args.high_augment,
-                                neighbor_rec=args.neighbor_rec,
-                                center_rec=args.center_rec)
+                                center_rec_coef=args.center_rec_coef)
 
         model.fit(graph)
         # labels = model.predict(graph)
@@ -202,11 +199,8 @@ def main(args):
 # Press the green button in the gutter to run the script.
 if __name__ == "__main__":
     args = build_args()
-    # args.dataset = 'inj_cora'
-    # args.device = 3
     args.seeds = [i for i in range(10)]
-    if args.use_cfg:
-        args = load_best_configs(args, current_dir + "/config_ada-gad.yml")
+    args = load_best_configs(args, current_dir + "/config_ada-gad.yml")
 
     if args.alpha=='None':
         args.alpha = None
