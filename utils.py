@@ -109,9 +109,6 @@ def build_args():
     parser.add_argument("--high_coe", type=float, default=0.5)
     parser.add_argument("--neighbor_rec_loss_coe", type=float, default=1.)
     parser.add_argument("--center_rec_coef", type=float, default=0.2)
-    parser.add_argument("--high_augment", type=bool, default=True)
-    parser.add_argument("--neighbor_rec", type=bool, default=True)
-    parser.add_argument("--center_rec", type=bool, default=True)
     
 
     args = parser.parse_args()
