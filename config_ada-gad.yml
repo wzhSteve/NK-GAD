@@ -20,12 +20,9 @@ inj_cora:
   loss_f: "add_log_t_entropy"
   T_f: 2
   highpass_layer_num: 1
-  # neighbor_rec_loss_coe: 1
-  # high_coe: 0.1
-  # center_rec_coef: 0.01
-  high_augment: True
-  neighbor_rec: True
-  center_rec: True
+  neighbor_rec_loss_coe: 1
+  high_coe: 0.1
+  center_rec_coef: 0.01
 inj_amazon:
   lr: 0.0001
   num_heads: 1
@@ -49,12 +46,9 @@ inj_amazon:
   loss_f: "add_log_t_entropy"
   T_f: 2
   highpass_layer_num: 1
-  high_coe: 0.9
+  high_coe: 0.3
   neighbor_rec_loss_coe: 1
-  center_rec_coef: 0.9
-  high_augment: True
-  neighbor_rec: True
-  center_rec: True
+  center_rec_coef: 0.5
 weibo:
   lr: 0.0001
   num_heads: 1
@@ -78,12 +72,9 @@ weibo:
   T_f: 2
   loss_weight_f: -0.1
   highpass_layer_num: 1
-  # neighbor_rec_loss_coe: 3
-  # high_coe: 0.1
-  # center_rec_coef: 0.5
-  high_augment: True
-  neighbor_rec: True
-  center_rec: True
+  neighbor_rec_loss_coe: 3
+  high_coe: 0.1
+  center_rec_coef: 0.5
 reddit:
   lr: 0.001
   weight_decay: 2e-4
@@ -105,12 +96,9 @@ reddit:
   loss_weight_f: -1
   alpha: 0.9
   highpass_layer_num: 1
-  # neighbor_rec_loss_coe: 0.5
-  # high_coe: 0.5
-  # center_rec_coef: 0.1
-  high_augment: True
-  neighbor_rec: True
-  center_rec: True
+  neighbor_rec_loss_coe: 0.5
+  high_coe: 0.5
+  center_rec_coef: 0.1
 disney:
   lr: 0.01
   num_heads: 1
@@ -136,12 +124,9 @@ disney:
   loss_weight_f: -0.01
   alpha: None
   highpass_layer_num: 2
-  # neighbor_rec_loss_coe: 1
-  # high_coe: 0.5
-  # center_rec_coef: 0.4
-  high_augment: True
-  neighbor_rec: True
-  center_rec: True
+  neighbor_rec_loss_coe: 1
+  high_coe: 0.5
+  center_rec_coef: 0.4
 books:
   lr: 0.0001
   num_heads: 1
@@ -167,12 +152,9 @@ books:
   T_f: 2
   loss_weight_f: -1
   highpass_layer_num: 1
-  # neighbor_rec_loss_coe: 1
-  # high_coe: 0.1
-  # center_rec_coef: 0.3
-  high_augment: True
-  neighbor_rec: True
-  center_rec: True
+  neighbor_rec_loss_coe: 1
+  high_coe: 0.1
+  center_rec_coef: 0.3
 enron:
   lr: 0.0001
   weight_decay: 2e-5
@@ -192,9 +174,6 @@ enron:
   loss_f: "add_log_t_entropy"
   T_f: 2
   highpass_layer_num: 1
-  # neighbor_rec_loss_coe: 1
-  # high_coe: 0.9
-  # center_rec_coef: 0
-  high_augment: True
-  neighbor_rec: True
-  center_rec: True
+  neighbor_rec_loss_coe: 1
+  high_coe: 0.9
+  center_rec_coef: 0
