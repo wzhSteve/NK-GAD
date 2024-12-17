@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -453,12 +452,11 @@ class NKAD_Base(nn.Module):
                 norm=None,
                 aggr=aggr,
             )
+        
         self.highpass_layer_num = highpass_layer_num
         self.high_coe = high_coe
         self.center_rec_coef = center_rec_coef
-
         self.k_neighbors = 10
-
         self.high_pass_encoder = HighPassGCN(in_channels=in_dim,
                                    hidden_channels=hid_dim,
                                    num_layers=highpass_layer_num,
@@ -472,21 +470,16 @@ class NKAD_Base(nn.Module):
         self.mlp_gen = MLP_generator(hid_dim, hid_dim)
         self.feature_decoder = FNN_GAD_NR(hid_dim, hid_dim, hid_dim, 2)
         self.reconstructor_from_neighbor = GATAggregator(hid_dim, hid_dim, hid_dim)
-            
-
 
     def forward(self, x, edge_index):
-        # # attribute encode
-        # low-pass
+        # attribute encode
         h0 = self.linear(x)
+        # low-pass
         h_low = self.attr_encoder(h0, edge_index).to(torch.float32)
-
         # high-pass
-        if self.high_augment:
-            h_high = self.high_pass_encoder(x, edge_index)
-            embed = (1 - self.high_coe) * h_low + self.high_coe * h_high
-        else:
-            embed = h_low
+        h_high = self.high_pass_encoder(x, edge_index)
+        
+        embed = (1 - self.high_coe) * h_low + self.high_coe * h_high
 
         h0_rec = self.feature_decoder(embed)
         h0_diff = (h0_rec - h0)  # [N, d]
@@ -495,17 +488,16 @@ class NKAD_Base(nn.Module):
         neighbor_rec_loss = neighbor_rec_loss + h0_rec_loss
 
         mean_agg, cov_agg = self.reconstructor_from_neighbor(generated_mean, generated_cov, edge_index)
-        # mean_agg = (mean_agg - mean_agg.mean()) / (mean_agg.std() + 1e-6)
         cov_agg = cov_agg / (torch.norm(cov_agg, dim=(-1, -2), keepdim=True) + 1e-6)
         h_reconstructed = torch.einsum('nd,nbd->nb', mean_agg, cov_agg)
         embed = (1 - self.center_rec_coef) * embed + self.center_rec_coef * h_reconstructed
             
-        # # attribute decode
+        # attribute decode
         if self.attr_decoder_name=='mlp' or self.attr_decoder_name=='linear':
             x_ = self.attr_decoder(embed)
         else:
             x_ = self.attr_decoder(embed, edge_index)
-        # # structure decode
+        # structure decode
         if self.struct_decoder_name=='mlp' or self.struct_decoder_name=='linear':
             h_ = self.struct_decoder(embed)
         else:
@@ -534,111 +526,75 @@ class NKAD_Base(nn.Module):
     
     def gather_neighbors_features(self, h0, edge_index):
         N, d = h0.shape
-        src, dst = edge_index  # 源节点和目标节点索引
-
-        # 统计每个节点的邻居特征索引
+        src, dst = edge_index 
         neighbors_indices = [[] for _ in range(N)]
         for s, t in zip(src.tolist(), dst.tolist()):
             neighbors_indices[t].append(s)
-
-        # 将邻居索引转化为 PyTorch 张量
         max_neighbors = max(len(neighbors) for neighbors in neighbors_indices)
         padded_neighbors = torch.full((N, max_neighbors), -1, dtype=torch.long, device=h0.device)
-
         for i, neighbors in enumerate(neighbors_indices):
             padded_neighbors[i, :len(neighbors)] = torch.tensor(neighbors, device=h0.device)
-
-        # 从邻居索引中随机选取 K 个邻居（重复采样处理）
         rand_indices = torch.randint(0, max_neighbors, (N, self.k_neighbors), device=h0.device)
         sampled_indices = torch.gather(padded_neighbors, 1, rand_indices)
-
-        # 处理无邻居情况（用零填充）
-        sampled_indices[sampled_indices == -1] = 0  # 无邻居的情况下，映射到第 0 节点
-
-        # 提取邻居特征
-        neighbors_features = h0[sampled_indices]  # [N, K, d]
-
-        # 如果某节点无邻居，返回全零张量
+        sampled_indices[sampled_indices == -1] = 0 
+        neighbors_features = h0[sampled_indices] 
         mask_no_neighbors = (padded_neighbors[:, 0] == -1)
         neighbors_features[mask_no_neighbors] = 0
-
         return neighbors_features
 
     def full_batch_neigh_recon(self, h1, h1_high, h0, edge_index):
-        """
-        Simplified computation of KL divergence loss to avoid NaN issues.
-        """
-        # Step 1: Compute target neighbor distribution (mean and covariance)
-        mean_neigh, std_neigh = self.compute_neighbors_stats(h0, edge_index)  # [N, d]
-        target_mean = mean_neigh  # [N, d]
+        mean_neigh, std_neigh = self.compute_neighbors_stats(h0, edge_index)
+        target_mean = mean_neigh
         target_std = std_neigh
-        # target_cov = torch.bmm(std_neigh.unsqueeze(-1), std_neigh.unsqueeze(1))  # [N, d, d]
 
-        neigh_features = self.gather_neighbors_features(h0, edge_index)  # [N, K, d]
-        neigh_centered = neigh_features - mean_neigh.unsqueeze(1)  # 中心化邻居特征 [N, K, d]
+        neigh_features = self.gather_neighbors_features(h0, edge_index)
+        neigh_centered = neigh_features - mean_neigh.unsqueeze(1)
 
-        # 计算协方差矩阵
-        target_cov = torch.einsum('nji,njk->nik', neigh_centered, neigh_centered)  # [N, d, d]
-        target_cov = target_cov / (self.k_neighbors - 1)  # 无偏估计
+        target_cov = torch.einsum('nji,njk->nik', neigh_centered, neigh_centered)
+        target_cov = target_cov / (self.k_neighbors - 1) 
 
-        # Add small regularization to target covariance
-        reg_eye = torch.eye(h0.shape[1], device=h0.device).unsqueeze(0).repeat(h0.shape[0], 1, 1)  # [N, d, d]
+        reg_eye = torch.eye(h0.shape[1], device=h0.device).unsqueeze(0).repeat(h0.shape[0], 1, 1)
         target_cov = target_cov + 1e-3 * reg_eye
 
-        # Step 2: Predict generated distribution's mean and standard deviation
-        generated_mean = self.mlp_mean(h1)  # [N, d]
-        generated_std = self.mlp_sigma(h1_high) #.exp()  # [N, d]
-        # Clamp standard deviation
+        generated_mean = self.mlp_mean(h1)
+        generated_std = self.mlp_sigma(h1_high)
         generated_std = torch.clamp(generated_std, min=1e-6, max=10.0)
 
-        # Step 3: Compute generated covariance
-        # generated_cov = torch.bmm(generated_std.unsqueeze(-1), generated_std.unsqueeze(1))  # [N, d, d]
-        generated_neigh_centered = neigh_features - generated_mean.unsqueeze(1)  # 中心化邻居特征 [N, K, d]
-        # 计算协方差矩阵
-        generated_cov = torch.einsum('nji,njk->nik', generated_neigh_centered, generated_neigh_centered)  # [N, d, d]
-        generated_cov = generated_cov / (self.k_neighbors - 1)  # 无偏估计
-        generated_cov = generated_cov + 1e-3 * reg_eye  # Regularize covariance
+        generated_neigh_centered = neigh_features - generated_mean.unsqueeze(1)
+        generated_cov = torch.einsum('nji,njk->nik', generated_neigh_centered, generated_neigh_centered)
+        generated_cov = generated_cov / (self.k_neighbors - 1) 
+        generated_cov = generated_cov + 1e-3 * reg_eye
 
-        # Step 4: Simplified KL loss
-        # Mean difference term
-        mean_diff = (generated_mean - target_mean)  # [N, d]
-        mean_term = torch.sum(mean_diff**2, dim=-1) # Scalar
-
-        # Mean difference term
-        std_diff = (generated_std - target_std)  # [N, d]
-        std_term = torch.sum(std_diff**2, dim=-1) # Scalar
+        mean_diff = (generated_mean - target_mean)
+        mean_term = torch.sum(mean_diff**2, dim=-1)
+        std_diff = (generated_std - target_std)
+        std_term = torch.sum(std_diff**2, dim=-1)
 
         self.KL = False
         
         if self.KL:
             k = h1.shape[1]  # Dimensionality of node features
-            trace_term = torch.einsum('nij,nji->n', torch.linalg.pinv(generated_cov), target_cov)  # [N]
-            mean_diff = (generated_mean - target_mean).unsqueeze(-1)  # [N, d, 1]
-            mahalanobis_term = torch.einsum('nij,njk,nki->n', mean_diff.transpose(1, 2), torch.linalg.pinv(generated_cov), mean_diff)  # [N]
-
-            # Use safer log determinant computation
+            trace_term = torch.einsum('nij,nji->n', torch.linalg.pinv(generated_cov), target_cov) 
+            mean_diff = (generated_mean - target_mean).unsqueeze(-1) 
+            mahalanobis_term = torch.einsum('nij,njk,nki->n', mean_diff.transpose(1, 2), torch.linalg.pinv(generated_cov), mean_diff)
+            
             def logdet_safe(cov_matrix):
                 eigvals = torch.linalg.eigvalsh(cov_matrix)
-                eigvals = torch.clamp(eigvals, min=1e-6)  # Ensure eigenvalues are non-negative
-                logdet = torch.sum(torch.log(eigvals), dim=-1)  # Log determinant
+                eigvals = torch.clamp(eigvals, min=1e-6)  
+                logdet = torch.sum(torch.log(eigvals), dim=-1) 
                 return logdet
 
-            logdet_gen = logdet_safe(generated_cov)  # [N]
-            logdet_tar = logdet_safe(target_cov)  # [N]
-            det_term = logdet_gen - logdet_tar  # [N]
+            logdet_gen = logdet_safe(generated_cov)  
+            logdet_tar = logdet_safe(target_cov)
+            det_term = logdet_gen - logdet_tar
 
-            # Total KL loss
-            kl_loss = 0.5 * (trace_term + mahalanobis_term.squeeze() - k + det_term)  # [N]
+            kl_loss = 0.5 * (trace_term + mahalanobis_term.squeeze() - k + det_term)
             kl_loss = kl_loss.mean()  # Scalar loss for the entire batch
             neighbor_loss = mean_term.mean() + std_term.mean() + kl_loss
         else:
-            # Covariance difference term (Frobenius norm)
             cov_diff = generated_cov - target_cov  # [N, d, d]
-            cov_term = torch.norm(cov_diff, p='fro', dim=(1, 2))  # Scalar
+            cov_term = torch.norm(cov_diff, p='fro', dim=(1, 2)) 
 
-            
-            # Total simplified loss
-            # mean_term = F.normalize(mean_term, p=1, dim=0)
-            neighbor_loss = mean_term.mean() + std_term.mean() + cov_term.mean()  # Scalar
+            neighbor_loss = mean_term.mean() + std_term.mean() + cov_term.mean()
 
         return target_mean, generated_cov, neighbor_loss
