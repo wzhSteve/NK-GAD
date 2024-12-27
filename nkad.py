@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -9,7 +10,6 @@ from sklearn.utils.validation import check_is_fitted
 from pygod.detector import Detector
 # from .gat import GAT
 from torch_geometric.nn import GCN, SAGEConv, PNAConv, GIN
-# from basic_nn import GCN
 from gat import GAT
 
 from pygod.utils import validate_device
@@ -59,14 +59,6 @@ def setup_module(m_type, enc_dec, in_dim, num_hidden, out_dim, num_layers, dropo
             norm=create_norm(norm),
             encoding=(enc_dec == "encoding"),
         )
-        # mod = GAT(
-        #     in_channels=in_dim,
-        #     hidden_channels=num_hidden,
-        #     out_channels=out_dim,
-        #     num_layers=num_layers,
-        #     act="relu",
-        #     dropout=dropout
-        # )
     elif m_type == "gin":
         mod = GIN(
             in_dim=int(in_dim),
@@ -129,6 +121,7 @@ class NKAD(Detector):
                  attr_decoder_num_layers=1,
                  struct_decoder_num_layers=1,
                  highpass_layer_num=2,
+                 lowpass_layer_num=2,
                  neighbor_rec_loss_coe=1,
                  high_coe=0.5,
                  center_rec_coef=0.2
@@ -173,6 +166,7 @@ class NKAD(Detector):
 
         self.dropout=dropout
         self.highpass_layer_num = highpass_layer_num
+        self.lowpass_layer_num = lowpass_layer_num
         self.neighbor_rec_loss_coe = neighbor_rec_loss_coe
         self.high_coe = high_coe
         self.center_rec_coef = center_rec_coef
@@ -184,6 +178,7 @@ class NKAD(Detector):
 
 
         if self.alpha is None:
+            a = torch.std(G.s).detach()
             self.alpha = torch.std(G.s).detach() / \
                          (torch.std(G.x).detach() + torch.std(G.s).detach())
 
@@ -207,6 +202,7 @@ class NKAD(Detector):
                                    attr_decoder_num_layers=self.attr_decoder_num_layers,
                                    struct_decoder_num_layers=self.struct_decoder_num_layers,
                                    highpass_layer_num=self.highpass_layer_num,
+                                   lowpass_layer_num=self.lowpass_layer_num,
                                    high_coe=self.high_coe,
                                    center_rec_coef=self.center_rec_coef).to(self.device)
 
@@ -388,6 +384,7 @@ class NKAD_Base(nn.Module):
                  attr_decoder_num_layers=1,
                  struct_decoder_num_layers=1,
                  highpass_layer_num=2,
+                 lowpass_layer_num=2,
                  high_coe=0.5,
                  center_rec_coef=0.2
                  ):
@@ -399,23 +396,6 @@ class NKAD_Base(nn.Module):
         self.aggr = aggr
         self.hid_dim = hid_dim
         self.linear = nn.Linear(in_dim, hid_dim)
-        self.attr_encoder = setup_module(
-            m_type=attr_encoder_name,
-            enc_dec="encoding",
-            in_dim=hid_dim,
-            num_hidden=hid_dim,
-            out_dim=hid_dim,
-            num_layers= node_encoder_num_layers,
-            nhead=1,
-            nhead_out=1,
-            concat_out=False,
-            activation=act,
-            dropout=dropout,
-            negative_slope=0.2,
-            residual=False,
-            norm=None,
-            aggr=aggr,
-        )
 
         self.attr_decoder = setup_module(
                 m_type=attr_decoder_name,
@@ -452,52 +432,66 @@ class NKAD_Base(nn.Module):
                 norm=None,
                 aggr=aggr,
             )
-        
         self.highpass_layer_num = highpass_layer_num
+        self.lowpass_layer_num = lowpass_layer_num
         self.high_coe = high_coe
         self.center_rec_coef = center_rec_coef
-        self.k_neighbors = 10
-        self.high_pass_encoder = HighPassGCN(in_channels=in_dim,
-                                   hidden_channels=hid_dim,
-                                   num_layers=highpass_layer_num,
-                                   out_channels=hid_dim,
-                                   dropout=dropout,
-                                   add_self_loops=False,
-                                   act=act)
-                     
+
+        self.k_neighbors = None
+
+        self.low_pass_encoder = LowPassGCN(in_channels=hid_dim,
+                                       hidden_channels=hid_dim,
+                                       num_layers=lowpass_layer_num,
+                                       out_channels=hid_dim,
+                                       dropout=dropout,
+                                       add_self_loops=False,
+                                       act=act)
+
+        self.high_pass_encoder = HighPassGCN(in_channels=hid_dim,
+                                       hidden_channels=hid_dim,
+                                       num_layers=highpass_layer_num,
+                                       out_channels=hid_dim,
+                                       dropout=dropout,
+                                       add_self_loops=False,
+                                       act=act)
+        
         self.mlp_mean = nn.Linear(hid_dim, hid_dim)
         self.mlp_sigma = nn.Linear(hid_dim, hid_dim)
         self.mlp_gen = MLP_generator(hid_dim, hid_dim)
         self.feature_decoder = FNN_GAD_NR(hid_dim, hid_dim, hid_dim, 2)
+
         self.reconstructor_from_neighbor = GATAggregator(hid_dim, hid_dim, hid_dim)
+            
+
 
     def forward(self, x, edge_index):
-        # attribute encode
-        h0 = self.linear(x)
+        # # attribute encode
         # low-pass
-        h_low = self.attr_encoder(h0, edge_index).to(torch.float32)
+        h0 = self.linear(x)
+        h_low = self.low_pass_encoder(h0, edge_index).to(torch.float32)
         # high-pass
-        h_high = self.high_pass_encoder(x, edge_index)
-        
+        h_high = self.high_pass_encoder(h0, edge_index)
         embed = (1 - self.high_coe) * h_low + self.high_coe * h_high
-
+        # neighbor_rec:
         h0_rec = self.feature_decoder(embed)
         h0_diff = (h0_rec - h0)  # [N, d]
         h0_rec_loss = torch.sum(h0_diff**2, dim=-1) # Scalar
-        generated_mean, generated_cov, neighbor_rec_loss = self.full_batch_neigh_recon(h_low, h_high, h0, edge_index)
+        generated_mean, generated_cov, neighbor_rec_loss = self.full_batch_neigh_recon(h_low, h_high, h0, h0_rec, edge_index)
         neighbor_rec_loss = neighbor_rec_loss + h0_rec_loss
 
+        # center_agg:
         mean_agg, cov_agg = self.reconstructor_from_neighbor(generated_mean, generated_cov, edge_index)
+        # mean_agg = (mean_agg - mean_agg.mean()) / (mean_agg.std() + 1e-6)
         cov_agg = cov_agg / (torch.norm(cov_agg, dim=(-1, -2), keepdim=True) + 1e-6)
         h_reconstructed = torch.einsum('nd,nbd->nb', mean_agg, cov_agg)
         embed = (1 - self.center_rec_coef) * embed + self.center_rec_coef * h_reconstructed
             
-        # attribute decode
+        # # attribute decode
         if self.attr_decoder_name=='mlp' or self.attr_decoder_name=='linear':
             x_ = self.attr_decoder(embed)
         else:
             x_ = self.attr_decoder(embed, edge_index)
-        # structure decode
+        # # structure decode
         if self.struct_decoder_name=='mlp' or self.struct_decoder_name=='linear':
             h_ = self.struct_decoder(embed)
         else:
@@ -526,75 +520,58 @@ class NKAD_Base(nn.Module):
     
     def gather_neighbors_features(self, h0, edge_index):
         N, d = h0.shape
-        src, dst = edge_index 
+        src, dst = edge_index
         neighbors_indices = [[] for _ in range(N)]
         for s, t in zip(src.tolist(), dst.tolist()):
             neighbors_indices[t].append(s)
         max_neighbors = max(len(neighbors) for neighbors in neighbors_indices)
         padded_neighbors = torch.full((N, max_neighbors), -1, dtype=torch.long, device=h0.device)
+
         for i, neighbors in enumerate(neighbors_indices):
             padded_neighbors[i, :len(neighbors)] = torch.tensor(neighbors, device=h0.device)
+
         rand_indices = torch.randint(0, max_neighbors, (N, self.k_neighbors), device=h0.device)
         sampled_indices = torch.gather(padded_neighbors, 1, rand_indices)
         sampled_indices[sampled_indices == -1] = 0 
-        neighbors_features = h0[sampled_indices] 
+        neighbors_features = h0[sampled_indices]
         mask_no_neighbors = (padded_neighbors[:, 0] == -1)
         neighbors_features[mask_no_neighbors] = 0
+
         return neighbors_features
 
-    def full_batch_neigh_recon(self, h1, h1_high, h0, edge_index):
+    def full_batch_neigh_recon(self, h1, h1_high, h0, h0_rec, edge_index):
+        # calculate the average degree
+        num_nodes = edge_index.max().item() + 1
+        degree = torch.bincount(edge_index[0], minlength=num_nodes)
+        self.k_neighbors = int(degree.float().mean().item())
+        
         mean_neigh, std_neigh = self.compute_neighbors_stats(h0, edge_index)
-        target_mean = mean_neigh
+        target_mean = mean_neigh 
         target_std = std_neigh
 
         neigh_features = self.gather_neighbors_features(h0, edge_index)
         neigh_centered = neigh_features - mean_neigh.unsqueeze(1)
-
         target_cov = torch.einsum('nji,njk->nik', neigh_centered, neigh_centered)
-        target_cov = target_cov / (self.k_neighbors - 1) 
-
+        target_cov = target_cov / (self.k_neighbors - 1)
         reg_eye = torch.eye(h0.shape[1], device=h0.device).unsqueeze(0).repeat(h0.shape[0], 1, 1)
         target_cov = target_cov + 1e-3 * reg_eye
 
         generated_mean = self.mlp_mean(h1)
         generated_std = self.mlp_sigma(h1_high)
-        generated_std = torch.clamp(generated_std, min=1e-6, max=10.0)
-
-        generated_neigh_centered = neigh_features - generated_mean.unsqueeze(1)
+        generated_neigh_features = self.gather_neighbors_features(h0_rec, edge_index)
+        generated_neigh_centered = generated_neigh_features - generated_mean.unsqueeze(1)
         generated_cov = torch.einsum('nji,njk->nik', generated_neigh_centered, generated_neigh_centered)
-        generated_cov = generated_cov / (self.k_neighbors - 1) 
-        generated_cov = generated_cov + 1e-3 * reg_eye
-
+        generated_cov = generated_cov / (self.k_neighbors - 1)
+        generated_cov = generated_cov + 1e-3 * reg_eye 
+        
         mean_diff = (generated_mean - target_mean)
         mean_term = torch.sum(mean_diff**2, dim=-1)
+
         std_diff = (generated_std - target_std)
         std_term = torch.sum(std_diff**2, dim=-1)
 
-        self.KL = False
-        
-        if self.KL:
-            k = h1.shape[1]  # Dimensionality of node features
-            trace_term = torch.einsum('nij,nji->n', torch.linalg.pinv(generated_cov), target_cov) 
-            mean_diff = (generated_mean - target_mean).unsqueeze(-1) 
-            mahalanobis_term = torch.einsum('nij,njk,nki->n', mean_diff.transpose(1, 2), torch.linalg.pinv(generated_cov), mean_diff)
-            
-            def logdet_safe(cov_matrix):
-                eigvals = torch.linalg.eigvalsh(cov_matrix)
-                eigvals = torch.clamp(eigvals, min=1e-6)  
-                logdet = torch.sum(torch.log(eigvals), dim=-1) 
-                return logdet
-
-            logdet_gen = logdet_safe(generated_cov)  
-            logdet_tar = logdet_safe(target_cov)
-            det_term = logdet_gen - logdet_tar
-
-            kl_loss = 0.5 * (trace_term + mahalanobis_term.squeeze() - k + det_term)
-            kl_loss = kl_loss.mean()  # Scalar loss for the entire batch
-            neighbor_loss = mean_term.mean() + std_term.mean() + kl_loss
-        else:
-            cov_diff = generated_cov - target_cov  # [N, d, d]
-            cov_term = torch.norm(cov_diff, p='fro', dim=(1, 2)) 
-
-            neighbor_loss = mean_term.mean() + std_term.mean() + cov_term.mean()
+        cov_diff = generated_cov - target_cov 
+        cov_term = torch.norm(cov_diff, p='fro', dim=(1, 2))
+        neighbor_loss = mean_term.mean() + std_term.mean() + cov_term.mean()
 
         return target_mean, generated_cov, neighbor_loss
