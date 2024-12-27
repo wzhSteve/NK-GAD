@@ -98,6 +98,7 @@ def main(args):
                                 attr_decoder_num_layers=attr_decoder_num_layers,
                                 struct_decoder_num_layers=struct_decoder_num_layers,
                                 highpass_layer_num=args.highpass_layer_num,
+                                lowpass_layer_num=args.lowpass_layer_num,
                                 neighbor_rec_loss_coe=args.neighbor_rec_loss_coe,
                                 high_coe=args.high_coe,
                                 center_rec_coef=args.center_rec_coef)
@@ -128,7 +129,6 @@ def main(args):
             ap_score_s = eval_average_precision(y_s, outlier_scores)
             rec_score_s = eval_recall_at_k(y_s, outlier_scores, sum(y_s))
         logging.info(f'auc_score: {auc_score:.4f}')
-
 
         auc_score_list.append(auc_score)
         ap_score_list.append(ap_score)
@@ -196,9 +196,10 @@ def main(args):
 
 
 
-# Press the green button in the gutter to run the script.
 if __name__ == "__main__":
     args = build_args()
+    args.dataset = 'enron'
+    args.device = 1
     args.seeds = [i for i in range(10)]
     args = load_best_configs(args, current_dir + "/config_ada-gad.yml")
 
