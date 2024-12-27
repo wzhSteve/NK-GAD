@@ -96,24 +96,11 @@ class GATAggregator(nn.Module):
         self.fc_cov = nn.Sequential(nn.Linear(input_dim * input_dim, hidden_dim * hidden_dim), nn.Linear(hidden_dim * hidden_dim, output_dim * output_dim))
 
     def forward(self, mean, cov, edge_index):
-        # Flatten covariance matrix into vector for processing
         cov_flat = cov.view(cov.size(0), -1)
-        # # mean
-        # # statistics
-        # aggregated_mean = torch.zeros_like(mean)  # [num_nodes, dist_dim]
-        # node_degrees = torch.zeros(mean.size(0), device=mean.device)
-        # src, dst = edge_index[:, 0], edge_index[:, 1]
-        # aggregated_mean.index_add_(0, dst, mean[src])
-        # node_degrees.index_add_(0, dst, torch.ones_like(dst, dtype=torch.float)) 
-        # node_degrees[node_degrees == 0] = 1
-        # mean_agg = aggregated_mean / node_degrees.unsqueeze(-1)
         mean_agg = self.gat_mean(mean, edge_index)
         cov_agg = self.gat_cov(cov_flat, edge_index)
-        # Transform to desired output dimensions
         mean_out = self.fc_mean(mean_agg)
         cov_out = self.fc_cov(cov_agg)
-
-        # Reshape aggregated covariance back to matrix form
         cov_out = cov_out.view(cov.size(0), cov.size(1), cov.size(2))
         return mean_out, cov_out
 
@@ -142,14 +129,12 @@ class HighPassConv(MessagePassing):
             torch.nn.init.zeros_(self.bias)
 
     def forward(self, x, edge_index, edge_weight=None):
-        # Step 1: Add self-loops to the adjacency matrix
         if self.add_self_loops:
             edge_index, edge_weight = add_self_loops(edge_index, edge_weight, num_nodes=x.size(0))
         
         if edge_weight is None:
             edge_weight = torch.ones((edge_index.size(1), ), dtype=x.dtype, device=edge_index.device)
         
-        # Step 2: Compute normalized (I - A)
         row, col = edge_index
         deg = degree(row, x.size(0), dtype=x.dtype)
         deg_inv_sqrt = deg.pow(-0.5)
@@ -157,18 +142,12 @@ class HighPassConv(MessagePassing):
 
         norm = deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
         norm = -norm  # Flip the sign for (I - A)
-
-        # Add the identity matrix (I)
         identity_index = torch.arange(0, x.size(0), device=x.device)
-        identity_weight = 2 * torch.ones(x.size(0), device=x.device)
+        identity_weight = torch.ones(x.size(0), device=x.device)
 
         edge_index = torch.cat([edge_index, torch.stack([identity_index, identity_index], dim=0)], dim=1)
         edge_weight = torch.cat([norm, identity_weight])
-
-        # Step 3: Perform the message passing
         out = self.propagate(edge_index, x=x, edge_weight=edge_weight)
-
-        # Step 4: Apply the linear transformation
         out = torch.matmul(out, self.weight)
 
         if self.bias is not None:
@@ -250,14 +229,12 @@ class LowPassConv(MessagePassing):
             torch.nn.init.zeros_(self.bias)
 
     def forward(self, x, edge_index, edge_weight=None):
-        # Step 1: Add self-loops to the adjacency matrix
         if self.add_self_loops:
             edge_index, edge_weight = add_self_loops(edge_index, edge_weight, num_nodes=x.size(0))
         
         if edge_weight is None:
             edge_weight = torch.ones((edge_index.size(1), ), dtype=x.dtype, device=edge_index.device)
-        
-        # Step 2: Compute normalized (I - A)
+
         row, col = edge_index
         deg = degree(row, x.size(0), dtype=x.dtype)
         deg_inv_sqrt = deg.pow(-0.5)
@@ -265,17 +242,13 @@ class LowPassConv(MessagePassing):
 
         norm = deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
 
-        # Add the identity matrix (I)
         identity_index = torch.arange(0, x.size(0), device=x.device)
         identity_weight = torch.ones(x.size(0), device=x.device)
 
         edge_index = torch.cat([edge_index, torch.stack([identity_index, identity_index], dim=0)], dim=1)
         edge_weight = torch.cat([norm, identity_weight])
 
-        # Step 3: Perform the message passing
         out = self.propagate(edge_index, x=x, edge_weight=edge_weight)
-
-        # Step 4: Apply the linear transformation
         out = torch.matmul(out, self.weight)
 
         if self.bias is not None:
@@ -333,3 +306,20 @@ class LowPassGCN(BasicGNN):
     def init_conv(self, in_channels: int, out_channels: int,
                   **kwargs) -> MessagePassing:
         return LowPassConv(in_channels, out_channels, **kwargs)
+
+
+def compute_spectrum(adj_matrix):
+    laplacian = scipy.sparse.csgraph.laplacian(adj_matrix, normed=True)
+    eigenvalues, _ = np.linalg.eigh(laplacian.toarray())
+    return eigenvalues
+
+def plot_spectrum(title, eigenvalues_before, eigenvalues_after):
+    plt.figure(figsize=(10, 6))
+    plt.plot(eigenvalues_before, label="Original Signal", marker='o')
+    plt.plot(eigenvalues_after, label="Filtered Signal", marker='x')
+    plt.title(title)
+    plt.xlabel("Frequency Component Index")
+    plt.ylabel("Magnitude")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(title + ".pdf")
