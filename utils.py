@@ -81,14 +81,13 @@ def build_args():
 
     parser.add_argument("--attr_decoder", type=str, default="gcn")
     parser.add_argument("--struct_decoder", type=str, default="gcn")
-    parser.add_argument("--alpha_l", type=float, default=3, help="`pow`coefficient for `sce` loss")
     parser.add_argument("--optimizer", type=str, default="adam")
     
     #for GAD finetune    
     parser.add_argument("--model_name", type=str, default="ADANET")
     parser.add_argument("--aggr_f", type=str, default='add')
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
-    parser.add_argument("--alpha_f", type=float, default=0.5)
+    parser.add_argument("--alpha", type=float, default=0.5)
     parser.add_argument("--dropout", type=float, default=0.0)
     parser.add_argument("--loss_f", type=str, default='rec')
     parser.add_argument("--loss_weight_f", type=float, default=-0.0001)
@@ -104,12 +103,11 @@ def build_args():
     parser.add_argument("--batch_size", type=int, default=32)
 
     # for graph anomaly detection
-    
+    parser.add_argument("--lowpass_layer_num", type=int, default=2)
     parser.add_argument("--highpass_layer_num", type=int, default=2)
     parser.add_argument("--high_coe", type=float, default=0.5)
     parser.add_argument("--neighbor_rec_loss_coe", type=float, default=1.)
-    parser.add_argument("--center_rec_coef", type=float, default=0.2)
-    
+    parser.add_argument("--center_rec_coef", type=float, default=0.2)    
 
     args = parser.parse_args()
     return args
