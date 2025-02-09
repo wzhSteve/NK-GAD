@@ -1,5 +1,5 @@
-# NKAD
-Neighbor Knowledge-aware Detector for Graph Anomaly Detection
+# NK-GAD
+Neighbor Knowledge-enhanced Unsupervised Graph Anomaly Detection
 
 Environment
 ```
