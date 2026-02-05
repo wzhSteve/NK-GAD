@@ -1,5 +1,5 @@
 # NK-GAD
-Neighbor Knowledge-enhanced Unsupervised Graph Anomaly Detection
+Neighbor Knowledge-enhanced Unsupervised Graph Anomaly Detection. DASFAA2026
 
 Environment
 ```
